@@ -7,20 +7,17 @@ import docx
 
 app = FastAPI()
 
-
+# ---------- File converters ----------
 def excel_to_text(content: bytes) -> str:
     df = pd.read_excel(BytesIO(content))
     return df.to_csv(index=False)
 
-
 def csv_to_text(content: bytes) -> str:
     return content.decode(errors="ignore")
-
 
 def json_to_text(content: bytes) -> str:
     obj = json.loads(content.decode(errors="ignore"))
     return json.dumps(obj, indent=2, ensure_ascii=False)
-
 
 def docx_to_text(content: bytes) -> str:
     document = docx.Document(BytesIO(content))
@@ -29,18 +26,28 @@ def docx_to_text(content: bytes) -> str:
 
 @app.post("/file-to-text")
 async def file_to_text(body: dict):
-    if "contentBytes" not in body or "name" not in body:
-        raise HTTPException(status_code=400, detail="Missing contentBytes or name")
+    # --------------------------
+    # Detect which schema is used
+    # --------------------------
+    if "contentBytes" in body:  # Schema 1
+        file_b64 = body["contentBytes"]
+        filename = body.get("name", "file")
+    elif "Content" in body and "Name" in body:  # Schema 2
+        file_b64 = body.get("Content") or body.get("Value")
+        filename = body["Name"]
+    else:
+        raise HTTPException(status_code=400, detail="Invalid schema. Missing contentBytes or Content/Name.")
 
+    # Decode base64
     try:
-        content = base64.b64decode(body["contentBytes"])
+        content = base64.b64decode(file_b64)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid base64 content")
 
-    filename = body["name"]
+    # Detect extension
     ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
 
-    # Detect & convert
+    # Convert
     try:
         if ext in {"xlsx", "xls"}:
             text = excel_to_text(content)
