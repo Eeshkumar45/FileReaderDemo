@@ -1,6 +1,7 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException
-from io import BytesIO
+import base64
 import json
+from fastapi import FastAPI, HTTPException
+from io import BytesIO
 import pandas as pd
 import docx
 
@@ -9,7 +10,6 @@ app = FastAPI()
 
 def excel_to_text(content: bytes) -> str:
     df = pd.read_excel(BytesIO(content))
-    # You can change to to_string() if you prefer a table view
     return df.to_csv(index=False)
 
 
@@ -28,11 +28,19 @@ def docx_to_text(content: bytes) -> str:
 
 
 @app.post("/file-to-text")
-async def file_to_text(file: UploadFile = File(...)):
-    content = await file.read()
-    filename = file.filename or ""
+async def file_to_text(body: dict):
+    if "contentBytes" not in body or "name" not in body:
+        raise HTTPException(status_code=400, detail="Missing contentBytes or name")
+
+    try:
+        content = base64.b64decode(body["contentBytes"])
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid base64 content")
+
+    filename = body["name"]
     ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
 
+    # Detect & convert
     try:
         if ext in {"xlsx", "xls"}:
             text = excel_to_text(content)
@@ -43,7 +51,6 @@ async def file_to_text(file: UploadFile = File(...)):
         elif ext == "docx":
             text = docx_to_text(content)
         else:
-            # Fallback: treat as plain text
             text = content.decode(errors="ignore")
     except Exception as ex:
         raise HTTPException(status_code=400, detail=f"Failed to parse file: {ex}")
@@ -51,5 +58,5 @@ async def file_to_text(file: UploadFile = File(...)):
     return {
         "filename": filename,
         "extension": ext,
-        "text": text,
+        "text": text
     }
