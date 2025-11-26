@@ -63,7 +63,6 @@ async def file_to_text(body: dict):
         raise HTTPException(status_code=400, detail=f"Failed to parse file: {ex}")
 
     return {
-        "filename": filename,
-        "extension": ext,
-        "text": text
+        "Content": text,
+        "Title": filename
     }
